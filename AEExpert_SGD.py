@@ -90,7 +90,7 @@ def data_cleaner_test(data, scaler):
 
 
 def train_run():
-    l_reg = SGDClassifier(loss="hinge", penalty="l2", max_iter=1000,early_stopping=True,warm_start=True,n_jobs=3,shuffle=True)
+    l_reg = SGDClassifier(loss="hinge", penalty="l2", max_iter=1000,early_stopping=True,warm_start=True,n_jobs=2,shuffle=True)
     file_path = os.path.join(os.getcwd(), 'input_data/train_amex/train.csv')
     data = pd.read_csv(file_path)
     data, y_hat, scaler = data_cleaner_train(data)
