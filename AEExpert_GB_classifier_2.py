@@ -1,14 +1,16 @@
 import pandas as pd
 
 pd.set_option
+from sklearn.ensemble import GradientBoostingClassifier
 import pandas as pd
 import os
 from sklearn.preprocessing import StandardScaler
 from sklearn.externals import joblib
 from sklearn.metrics import roc_auc_score
-from sklearn.ensemble import GradientBoostingClassifier
-from data_processor import data_cleaner_train, data_cleaner_test
-import pickle
+from sklearn.model_selection import RandomizedSearchCV
+from data_processor import data_cleaner_train5 as data_cleaner_train
+from data_processor import data_cleaner_test5 as data_cleaner_test
+from data_processor import report
 
 pd.set_option('display.max_rows', 100)
 pd.set_option('display.max_columns', 100)
@@ -24,44 +26,48 @@ scale = StandardScaler()
 
 
 def train_run():
-    l_reg = GradientBoostingClassifier(learning_rate=1.0, n_estimators=300, max_depth=20, random_state=0, verbose=True)
+    l_reg = GradientBoostingClassifier(max_features=None, subsample=0.80, random_state=0, verbose=True, learning_rate=0.05)
     file_path = os.path.join(os.getcwd(), 'input_data/train_amex/train.csv')
-    userlogs_path = os.path.join(os.getcwd(), 'input_data/train_amex/historical_user_logs.csv')
     data = pd.read_csv(file_path)
-    userlogs = pd.read_csv(userlogs_path)
-
-    data, y_hat, scaler, to_keep_prod_2, is_interesting = data_cleaner_train(data, userlogs)
-    with open(to_keep_file_name, 'wb') as f:
-        pickle.dump(to_keep_prod_2, f)
-    is_interesting.to_pickle(is_int_fname)
-
+    data, y_hat, scaler = data_cleaner_train(data)
     data.loc[:, 'yhat'] = y_hat
     d1 = data.loc[data.yhat == 1, :]
     d2 = data.loc[data.yhat == 0, :]
-
     data_op = pd.DataFrame()
-    yhat_op = pd.DataFrame()
 
-    for i in range(50):
+    for i in range(3):
         print(i)
-        d1_sample = d1.sample(n=10000, replace=True)
-        d2_sample = d2.sample(n=len(d1_sample), replace=True)
+        d1_sample = d1.sample(frac=1)
+        d2_sample = d2.sample(n=len(d1_sample), replace=False)
         data_tmp = d1_sample.append(d2_sample)
         data_op = data_op.append(data_tmp, ignore_index=True)
+
+    data_op = data_op.sample(frac=1)
     yhat_op = data_op.loc[:, 'yhat']
+
     data_op.drop('yhat', axis=1, inplace=True)
     data.drop('yhat', axis=1, inplace=True)
-    data = data.sample(frac=1)
-    model = l_reg.fit(data_op.values, yhat_op.values)
+
+    # specify parameters and distributions to sample from
+    param_dist = {'max_depth': range(10, 30), 'min_samples_split': range(100, 1000, 200), 'n_estimators': range(100, 1000, 300), 'min_samples_leaf': range(100, 1000, 200)}
+
+    # run randomized search
+    n_iter_search = 5
+    random_search = RandomizedSearchCV(l_reg, param_distributions=param_dist,
+                                       n_iter=n_iter_search, cv=5, scoring='roc_auc', n_jobs=2)
+
+    model = random_search.fit(data_op.values, yhat_op.values)
+    report(random_search.cv_results_)
+
+    # model = l_reg.fit(data_op.values, yhat_op.values)
+
     output = model.predict(data.values)
-    # output[output > 0.5] = 1
-    # output[output < 0.5] = 0
+
     roc = roc_auc_score(y_hat.values, output)
+    print('#############################################################')
     print(roc)
     joblib.dump(model, model_filename)
     joblib.dump(scaler, scaler_filename)
-
-    a = 10
 
 
 def test_run():
@@ -71,14 +77,10 @@ def test_run():
     output.loc[:, 'session_id'] = data['session_id']
     scaler = joblib.load(scaler_filename)
     model = joblib.load(model_filename)
-    is_interesting = pd.read_pickle(is_int_fname)
-
-    to_keep = pickle.load(open(to_keep_file_name, "rb"))
-    data = data_cleaner_test(data, scaler, to_keep, is_interesting)
+    data = data_cleaner_test(data, scaler)
     y_pred = model.predict(data.values)
     output.loc[:, 'is_click'] = y_pred
     output.to_csv(op_path, index=False)
-    a = 10
 
 
 if __name__ == '__main__':

@@ -51,72 +51,79 @@ pd.set_option
 import pandas as pd
 import os
 from sklearn.preprocessing import StandardScaler
-from sklearn.impute import SimpleImputer
 from sklearn.externals import joblib
 from sklearn.metrics import roc_auc_score
-from sklearn.linear_model import SGDClassifier
-
-scale = StandardScaler()
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import RandomizedSearchCV
+from data_processor import data_cleaner_train5 as data_cleaner_train
+from data_processor import data_cleaner_test5 as data_cleaner_test
+from data_processor import report
+from scipy.stats import randint as sp_randint
 
 pd.set_option('display.max_rows', 100)
 pd.set_option('display.max_columns', 100)
 pd.set_option('display.width', 2000)
 
-scaler_filename = "input_data/sgd_scaler.save"
-model_filename = "input_data/sgd_model.save"
-op_path='input_data/outputs/sgd_test_results.csv'
-
-def data_cleaner_train(data):
-    data.drop(['session_id', 'DateTime', 'user_id', 'campaign_id', 'product_category_2'], axis=1, inplace=True)
-    data.loc[:, 'city_development_index'] = data['city_development_index'].fillna(data['city_development_index'].value_counts().index[0])
-    data.dropna(axis=0, inplace=True)
-    data.reset_index(drop=True, inplace=True)
-    y_hat = data['is_click']
-    data.drop('is_click', axis=1, inplace=True)
-    data = pd.get_dummies(data, columns=data.columns)
-    ss_scalar = scale.fit(data[data.columns].as_matrix())
-    data[data.columns] = ss_scalar.transform(data[data.columns].values)
-    return data, y_hat, ss_scalar
-
-
-def data_cleaner_test(data, scaler):
-    data.drop(['session_id', 'DateTime', 'user_id', 'campaign_id', 'product_category_2'], axis=1, inplace=True)
-    data.reset_index(drop=True, inplace=True)
-    data = pd.get_dummies(data, columns=data.columns)
-    imp_freq = SimpleImputer(strategy='most_frequent')
-    data[data.columns] = imp_freq.fit_transform(data[data.columns].values)
-    data[data.columns] = scaler.transform(data[data.columns].values)
-    return data
+PREFIX = 'forest_3_'
+is_int_fname = 'input_data/outputs/' + PREFIX + 'is_interesting.pickle'
+to_keep_file_name = 'input_data/outputs/' + PREFIX + 'to_keep_prod_2.pickle'
+scaler_filename = 'input_data/' + PREFIX + 'scaler.save'
+model_filename = 'input_data/' + PREFIX + 'model.save'
+op_path = 'input_data/outputs/' + PREFIX + 'test_results.csv'
+scale = StandardScaler()
 
 
 def train_run():
-    l_reg = SGDClassifier(loss="hinge", penalty="l2", max_iter=1000,early_stopping=True,warm_start=True,n_jobs=2,shuffle=True)
+    l_reg = RandomForestClassifier(random_state=0, n_jobs=3, verbose=3)
     file_path = os.path.join(os.getcwd(), 'input_data/train_amex/train.csv')
+
     data = pd.read_csv(file_path)
+
     data, y_hat, scaler = data_cleaner_train(data)
+
     data.loc[:, 'yhat'] = y_hat
     d1 = data.loc[data.yhat == 1, :]
     d2 = data.loc[data.yhat == 0, :]
 
-    # TODO make a load balancer !!!!!!!
-    for i in range(500):
-        print(i)
-        d1_sample = d1.sample(n=10000, replace=True)
-        d2_sample = d2.sample(n=len(d1_sample), replace=True)
-        data_tmp = d1_sample.append(d2_sample)
-        y_hat_tmp = data_tmp.loc[:, 'yhat']
-        data_tmp.drop('yhat', axis=1, inplace=True)
-        model = l_reg.fit(data_tmp.values, y_hat_tmp.values)
+    data_op = pd.DataFrame()
 
+    for i in range(5):
+        print(i)
+        d1_sample = d1.sample(frac=1, replace=False)
+        d2_sample = d2.sample(n=len(d1_sample), replace=False)
+        data_tmp = d1_sample.append(d2_sample)
+        data_op = data_op.append(data_tmp, ignore_index=True)
+
+    data_op = data_op.sample(frac=1)
+    yhat_op = data_op.loc[:, 'yhat']
+
+    # predictors = list(data_op.drop('yhat', axis=1).columns)
+    # modelfit(l_reg, data_op, predictors, performCV=True, printFeatureImportance=True, cv_folds=5)
+
+    data_op.drop('yhat', axis=1, inplace=True)
     data.drop('yhat', axis=1, inplace=True)
+
+    # specify parameters and distributions to sample from
+    param_dist = {"max_depth": [3, 10, 20, 30, 40, 50],
+                  "max_features": sp_randint(5, 50),
+                  "min_samples_split": sp_randint(2, 20),
+                  "bootstrap": [True, False],
+                  "criterion": ["gini", "entropy"]}
+
+    # run randomized search
+    n_iter_search = 10
+    random_search = RandomizedSearchCV(l_reg, param_distributions=param_dist,
+                                       n_iter=n_iter_search, cv=5, scoring='roc_auc', n_jobs=1)
+
+    model = random_search.fit(data_op.values, yhat_op.values)
+    report(random_search.cv_results_)
+
+    # model = l_reg.fit(data_op.values, yhat_op.values)
     output = model.predict(data.values)
-    # output[output > 0.5] = 1
-    # output[output < 0.5] = 0
     roc = roc_auc_score(y_hat.values, output)
     print(roc)
     joblib.dump(model, model_filename)
     joblib.dump(scaler, scaler_filename)
-    a = 10
 
 
 def test_run():
@@ -130,7 +137,6 @@ def test_run():
     y_pred = model.predict(data.values)
     output.loc[:, 'is_click'] = y_pred
     output.to_csv(op_path, index=False)
-    a = 10
 
 
 if __name__ == '__main__':
