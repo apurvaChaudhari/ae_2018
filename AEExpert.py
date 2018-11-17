@@ -90,7 +90,7 @@ def data_cleaner_test(data, scaler):
 
 
 def train_run():
-    l_reg = RandomForestClassifier(n_estimators=300, max_depth=15,random_state=0)
+    l_reg = RandomForestClassifier(n_estimators=500, max_depth=20,random_state=0)
     file_path = os.path.join(os.getcwd(), 'input_data/train_amex/train.csv')
     data = pd.read_csv(file_path)
     data, y_hat, scaler = data_cleaner_train(data)
@@ -99,7 +99,7 @@ def train_run():
     d2 = data.loc[data.yhat == 0, :]
 
     # TODO make a load balancer !!!!!!!
-    for i in range(10):
+    for i in range(100):
         print(i)
         d1_sample=d1.sample(n=10000,replace=True)
         d2_sample=d2.sample(n=len(d1_sample),replace=True)
@@ -128,9 +128,9 @@ def test_run():
     data = data_cleaner_test(data, scaler)
     y_pred = model.predict(data.values)
     output.loc[:, 'is_click'] =y_pred
-    output.to_csv('input_data/outputs/first_test.csv', index=False)
+    output.to_csv('input_data/outputs/test_results.csv', index=False)
     a = 10
 
 
 if __name__ == '__main__':
-    train_run()
+    test_run()
