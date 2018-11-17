@@ -54,7 +54,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.externals import joblib
 from sklearn.metrics import roc_auc_score
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import AdaBoostClassifier
 
 scale = StandardScaler()
 
@@ -62,10 +62,9 @@ pd.set_option('display.max_rows', 100)
 pd.set_option('display.max_columns', 100)
 pd.set_option('display.width', 2000)
 
-scaler_filename = "input_data/forest_scaler.save"
-model_filename = "input_data/forest_model.save"
-op_path='input_data/outputs/forest_test_results.csv'
-
+scaler_filename = "input_data/ada_scaler.save"
+model_filename = "input_data/ada_model.save"
+op_path='input_data/outputs/ada_test_results.csv'
 
 def data_cleaner_train(data):
     data.drop(['session_id', 'DateTime', 'user_id', 'campaign_id', 'product_category_2'], axis=1, inplace=True)
@@ -91,7 +90,7 @@ def data_cleaner_test(data, scaler):
 
 
 def train_run():
-    l_reg = RandomForestClassifier(n_estimators=500, max_depth=20,random_state=0)
+    l_reg = AdaBoostClassifier(n_estimators=200)
     file_path = os.path.join(os.getcwd(), 'input_data/train_amex/train.csv')
     data = pd.read_csv(file_path)
     data, y_hat, scaler = data_cleaner_train(data)
@@ -99,7 +98,7 @@ def train_run():
     d1 = data.loc[data.yhat == 1, :]
     d2 = data.loc[data.yhat == 0, :]
 
-    data_op=pd.DataFrame()
+    data_op = pd.DataFrame()
     yhat_op = pd.DataFrame()
     # TODO make a load balancer !!!!!!!
     for i in range(30):

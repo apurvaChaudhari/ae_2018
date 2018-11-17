@@ -54,7 +54,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.externals import joblib
 from sklearn.metrics import roc_auc_score
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import SGDClassifier
 
 scale = StandardScaler()
 
@@ -62,10 +62,9 @@ pd.set_option('display.max_rows', 100)
 pd.set_option('display.max_columns', 100)
 pd.set_option('display.width', 2000)
 
-scaler_filename = "input_data/forest_scaler.save"
-model_filename = "input_data/forest_model.save"
-op_path='input_data/outputs/forest_test_results.csv'
-
+scaler_filename = "input_data/sgd_scaler.save"
+model_filename = "input_data/sgd_model.save"
+op_path='input_data/outputs/sgd_test_results.csv'
 
 def data_cleaner_train(data):
     data.drop(['session_id', 'DateTime', 'user_id', 'campaign_id', 'product_category_2'], axis=1, inplace=True)
@@ -91,7 +90,7 @@ def data_cleaner_test(data, scaler):
 
 
 def train_run():
-    l_reg = RandomForestClassifier(n_estimators=500, max_depth=20,random_state=0)
+    l_reg = SGDClassifier(loss="hinge", penalty="l2", max_iter=1000,early_stopping=True,warm_start=True,n_jobs=3,shuffle=True)
     file_path = os.path.join(os.getcwd(), 'input_data/train_amex/train.csv')
     data = pd.read_csv(file_path)
     data, y_hat, scaler = data_cleaner_train(data)
@@ -99,19 +98,17 @@ def train_run():
     d1 = data.loc[data.yhat == 1, :]
     d2 = data.loc[data.yhat == 0, :]
 
-    data_op=pd.DataFrame()
-    yhat_op = pd.DataFrame()
     # TODO make a load balancer !!!!!!!
-    for i in range(30):
+    for i in range(500):
         print(i)
         d1_sample = d1.sample(n=10000, replace=True)
         d2_sample = d2.sample(n=len(d1_sample), replace=True)
         data_tmp = d1_sample.append(d2_sample)
-        data_op=data_op.append(data_tmp,ignore_index=True)
+        y_hat_tmp = data_tmp.loc[:, 'yhat']
+        data_tmp.drop('yhat', axis=1, inplace=True)
+        model = l_reg.fit(data_tmp.values, y_hat_tmp.values)
 
-    yhat_op = data_op.loc[:, 'yhat']
-    data_op.drop('yhat', axis=1, inplace=True)
-    model = l_reg.fit(data_op.values, yhat_op.values)
+    data.drop('yhat', axis=1, inplace=True)
     output = model.predict(data.values)
     # output[output > 0.5] = 1
     # output[output < 0.5] = 0
