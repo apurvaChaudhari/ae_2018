@@ -9,11 +9,31 @@ from sklearn import metrics  # Additional scklearn functions
 from sklearn.model_selection import cross_val_score
 from datetime import *
 import matplotlib.pylab as plt
-
+from sklearn import decomposition
 from matplotlib.pylab import rcParams
+from sklearn import manifold
 
 rcParams['figure.figsize'] = 12, 4
 scale = StandardScaler()
+
+filter_list = ['product_category_2_0.0',
+               'product_category_2_143597.0',
+               'product_category_2_146115.0',
+               'product_category_2_168114.0',
+               'product_category_2_18595.0',
+               'product_category_2_234846.0',
+               'product_category_2_235358.0',
+               'product_category_2_254132.0',
+               'product_category_2_255689.0',
+               'product_category_2_269093.0',
+               'product_category_2_270915.0',
+               'product_category_2_32026.0',
+               'product_category_2_327439.0',
+               'product_category_2_408790.0',
+               'product_category_2_419804.0',
+               'product_category_2_447834.0',
+               'product_category_2_450184.0',
+               'product_category_2_82527.0']
 
 
 def data_cleaner_train(data, user_logs):
@@ -29,7 +49,7 @@ def data_cleaner_train(data, user_logs):
     user_logs = user_logs.reset_index()
     user_logs.columns = ['product', 'is_interesting']
     data = pd.merge(data, user_logs, on='product', how='outer')
-    data.loc[:,'is_interesting']= data['is_interesting'].fillna(0)
+    data.loc[:, 'is_interesting'] = data['is_interesting'].fillna(0)
     y_hat = data['is_click']
     data.drop('is_click', axis=1, inplace=True)
     data = pd.get_dummies(data, columns=data.columns)
@@ -84,8 +104,8 @@ def data_cleaner_test2(data, scaler, to_keep_prod_2):
 
 
 def data_cleaner_train3(data):
-    data.drop(['session_id', 'DateTime', 'user_id', 'campaign_id','product_category_2'], axis=1, inplace=True)
-    data=data.fillna('NAN')
+    data.drop(['session_id', 'DateTime', 'user_id', 'campaign_id', 'product_category_2'], axis=1, inplace=True)
+    data = data.fillna('NAN')
     data.reset_index(drop=True, inplace=True)
     y_hat = data['is_click']
     data.drop('is_click', axis=1, inplace=True)
@@ -94,8 +114,9 @@ def data_cleaner_train3(data):
     data[data.columns] = ss_scalar.transform(data[data.columns].values)
     return data, y_hat, ss_scalar
 
+
 def data_cleaner_test3(data, scaler):
-    data.drop(['session_id', 'DateTime', 'user_id', 'campaign_id','product_category_2'], axis=1, inplace=True)
+    data.drop(['session_id', 'DateTime', 'user_id', 'campaign_id', 'product_category_2'], axis=1, inplace=True)
     data.reset_index(drop=True, inplace=True)
     data = data.fillna('NAN')
     data = pd.get_dummies(data, columns=data.columns)
@@ -168,7 +189,7 @@ def data_cleaner_train5(data):
 
 
 def data_cleaner_test5(data, scaler):
-    data.drop(['session_id', 'user_id', 'campaign_id','product_category_2'], axis=1, inplace=True)
+    data.drop(['session_id', 'user_id', 'campaign_id', 'product_category_2'], axis=1, inplace=True)
 
     data['DateTime'] = pd.to_datetime(data['DateTime'])
     data['DateTime'] = [datetime.time(d) for d in data['DateTime']]
@@ -184,6 +205,110 @@ def data_cleaner_test5(data, scaler):
     data = pd.get_dummies(data, columns=data.columns)
     data = data.fillna('NAN')
     data[data.columns] = scaler.transform(data[data.columns].values)
+    return data
+
+
+def data_cleaner_train6(data):
+    data.drop(['session_id', 'user_id', 'product_category_2'], axis=1, inplace=True)
+
+    data['DateTime'] = pd.to_datetime(data['DateTime'])
+    data['DateTime'] = [datetime.time(d) for d in data['DateTime']]
+    conditions = [
+        (data['DateTime'] < datetime(1900, 1, 1, 12).time()),
+        (data['DateTime'] < datetime(1900, 1, 1, 17).time()),
+        (data['DateTime'] < datetime(1900, 1, 1, 22).time())]
+    choices = ['morning', 'afternoon', 'evening']
+    data['DateTime'] = np.select(conditions, choices, default='late night')
+    data = data.fillna(0)
+
+    data.reset_index(drop=True, inplace=True)
+    y_hat = data['is_click']
+    data.drop('is_click', axis=1, inplace=True)
+    data = pd.get_dummies(data, columns=data.columns)
+
+    ss_scalar = scale.fit(data[data.columns].as_matrix())
+    data[data.columns] = ss_scalar.transform(data[data.columns].values)
+    pca = decomposition.PCA(n_components=10)
+    pca.fit(data)
+    data = pca.transform(data)
+    data = pd.DataFrame(data)
+
+    return data, y_hat, ss_scalar, pca
+
+
+def data_cleaner_test6(data, scaler, pca):
+    data.drop(['session_id', 'user_id', 'product_category_2'], axis=1, inplace=True)
+
+    data['DateTime'] = pd.to_datetime(data['DateTime'])
+    data['DateTime'] = [datetime.time(d) for d in data['DateTime']]
+    conditions = [
+        (data['DateTime'] < datetime(1900, 1, 1, 12).time()),
+        (data['DateTime'] < datetime(1900, 1, 1, 17).time()),
+        (data['DateTime'] < datetime(1900, 1, 1, 22).time())]
+    choices = ['morning', 'afternoon', 'evening']
+    data['DateTime'] = np.select(conditions, choices, default='late night')
+    data = data.fillna('NAN')
+
+    data.reset_index(drop=True, inplace=True)
+    data = pd.get_dummies(data, columns=data.columns)
+
+    data[data.columns] = scaler.transform(data[data.columns].values)
+    data = pca.transform(data)
+    data = pd.DataFrame(data)
+    return data
+
+
+def data_cleaner_train7(data):
+    global filter_list
+    data.drop(['session_id', 'user_id', 'DateTime'], axis=1, inplace=True)
+
+    # data['DateTime'] = pd.to_datetime(data['DateTime'])
+    # data['DateTime'] = [datetime.time(d) for d in data['DateTime']]
+    # conditions = [
+    #     (data['DateTime'] < datetime(1900, 1, 1, 12).time()),
+    #     (data['DateTime'] < datetime(1900, 1, 1, 17).time()),
+    #     (data['DateTime'] < datetime(1900, 1, 1, 22).time())]
+    # choices = ['morning', 'afternoon', 'evening']
+    # data['DateTime'] = np.select(conditions, choices, default='late night')
+    data = data.fillna(0)
+
+    data.reset_index(drop=True, inplace=True)
+    y_hat = data['is_click']
+    data.drop('is_click', axis=1, inplace=True)
+    data.loc[~data['product_category_2'].isin(filter_list), 'product_category_2'] = 0
+    data = pd.get_dummies(data, columns=data.columns)
+
+    # ss_scalar = scale.fit(data[data.columns].as_matrix())
+    # data[data.columns] = ss_scalar.transform(data[data.columns].values)
+    pca = decomposition.PCA(n_components=5)
+    pca.fit(data)
+    data = pca.transform(data)
+    data = pd.DataFrame(data)
+    # filter_list2 = [i for i in data.columns if 'product_category_2' in i]
+    return data, y_hat, pca
+
+
+def data_cleaner_test7(data, pca):
+    global filter_list
+    data.drop(['session_id', 'user_id', 'DateTime'], axis=1, inplace=True)
+
+    # data['DateTime'] = pd.to_datetime(data['DateTime'])
+    # data['DateTime'] = [datetime.time(d) for d in data['DateTime']]
+    # conditions = [
+    #     (data['DateTime'] < datetime(1900, 1, 1, 12).time()),
+    #     (data['DateTime'] < datetime(1900, 1, 1, 17).time()),
+    #     (data['DateTime'] < datetime(1900, 1, 1, 22).time())]
+    # choices = ['morning', 'afternoon', 'evening']
+    # data['DateTime'] = np.select(conditions, choices, default='late night')
+    data = data.fillna(0)
+
+    data.reset_index(drop=True, inplace=True)
+    data.loc[~data['product_category_2'].isin(filter_list), 'product_category_2'] = 0
+    data = pd.get_dummies(data, columns=data.columns)
+
+    # data[data.columns] = scaler.transform(data[data.columns].values)
+    data = pca.transform(data)
+    data = pd.DataFrame(data)
     return data
 
 
